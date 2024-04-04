@@ -1,5 +1,5 @@
 enum TextTrackType {
-  SUBRIP = 'application/x-subrip',
+  SRT = 'application/x-subrip',
   TTML = 'application/ttml+xml',
   VTT = 'text/vtt',
 }

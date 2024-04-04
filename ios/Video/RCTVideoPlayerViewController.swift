@@ -35,13 +35,8 @@ class RCTVideoPlayerViewController: AVPlayerViewController {
                 return .portrait
             } else {
                 // default case
-                if #available(iOS 13, tvOS 13, *) {
-                    return RCTVideoUtils.getCurrentWindow()?.windowScene?.interfaceOrientation ?? .unknown
-                } else {
-                    #if !os(visionOS)
-                        return UIApplication.shared.statusBarOrientation
-                    #endif
-                }
+                let orientation = UIApplication.shared.statusBarOrientation
+                return orientation
             }
         }
 

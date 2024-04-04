@@ -25,16 +25,6 @@ struct DRMParams {
         self.contentId = json["contentId"] as? String
         self.certificateUrl = json["certificateUrl"] as? String
         self.base64Certificate = json["base64Certificate"] as? Bool
-        if let headers = json["headers"] as? [[String: Any]] {
-            var _headers: [String: Any] = [:]
-            for header in headers {
-                if let key = header["key"] as? String, let value = header["value"] {
-                    _headers[key] = value
-                }
-            }
-            self.headers = _headers
-        } else {
-            self.headers = nil
-        }
+        self.headers = json["headers"] as? [String: Any]
     }
 }

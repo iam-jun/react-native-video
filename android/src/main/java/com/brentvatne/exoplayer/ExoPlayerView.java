@@ -108,10 +108,6 @@ public final class ExoPlayerView extends FrameLayout implements AdViewProvider {
         }
     }
 
-    public boolean isPlaying() {
-        return player != null && player.isPlaying();
-    }
-
     public void setSubtitleStyle(SubtitleStyle style) {
         // ensure we reset subtile style before reapplying it
         subtitleLayout.setUserDefaultStyle();
@@ -121,13 +117,6 @@ public final class ExoPlayerView extends FrameLayout implements AdViewProvider {
             subtitleLayout.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, style.getFontSize());
         }
         subtitleLayout.setPadding(style.getPaddingLeft(), style.getPaddingTop(), style.getPaddingRight(), style.getPaddingBottom());
-        if (style.getOpacity() != 0) {
-            subtitleLayout.setAlpha(style.getOpacity());
-            subtitleLayout.setVisibility(View.VISIBLE);
-        } else {
-            subtitleLayout.setVisibility(View.GONE);
-        }
-
     }
 
     public void setShutterColor(Integer color) {
@@ -143,8 +132,6 @@ public final class ExoPlayerView extends FrameLayout implements AdViewProvider {
             }
         } else {
             view = new TextureView(context);
-            // Support opacity properly:
-            ((TextureView) view).setOpaque(false);
         }
         view.setLayoutParams(layoutParams);
 

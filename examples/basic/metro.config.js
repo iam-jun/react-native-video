@@ -1,6 +1,6 @@
 /**
  * Metro configuration for React Native
- * https://reactnative.dev/docs/metro
+ * https://github.com/facebook/react-native
  *
  * @format
  */
@@ -43,10 +43,6 @@ const config = {
       acc[name] = path.join(__dirname, 'node_modules', name);
       return acc;
     }, {}),
-    nodeModulesPaths: [
-      path.resolve(path.join(__dirname, './node_modules')),
-      path.resolve(path.join(__dirname, '../../node_modules')),
-    ],
     transformer: {
       getTransformOptions: async () => ({
         transform: {

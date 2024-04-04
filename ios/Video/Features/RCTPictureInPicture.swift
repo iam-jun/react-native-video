@@ -6,40 +6,34 @@ import React
 
 #if os(iOS)
     class RCTPictureInPicture: NSObject, AVPictureInPictureControllerDelegate {
-        private var _onPictureInPictureEnter: (() -> Void)?
-        private var _onPictureInPictureExit: (() -> Void)?
+        private var _onPictureInPictureStatusChanged: (() -> Void)?
         private var _onRestoreUserInterfaceForPictureInPictureStop: (() -> Void)?
         private var _restoreUserInterfaceForPIPStopCompletionHandler: ((Bool) -> Void)?
         private var _pipController: AVPictureInPictureController?
         private var _isActive = false
 
-        init(
-            _ onPictureInPictureEnter: (() -> Void)? = nil,
-            _ onPictureInPictureExit: (() -> Void)? = nil,
-            _ onRestoreUserInterfaceForPictureInPictureStop: (() -> Void)? = nil
-        ) {
-            _onPictureInPictureEnter = onPictureInPictureEnter
-            _onPictureInPictureExit = onPictureInPictureExit
+        init(_ onPictureInPictureStatusChanged: (() -> Void)? = nil, _ onRestoreUserInterfaceForPictureInPictureStop: (() -> Void)? = nil) {
+            _onPictureInPictureStatusChanged = onPictureInPictureStatusChanged
             _onRestoreUserInterfaceForPictureInPictureStop = onRestoreUserInterfaceForPictureInPictureStop
         }
 
         func pictureInPictureControllerDidStartPictureInPicture(_: AVPictureInPictureController) {
-            guard let _onPictureInPictureEnter else { return }
+            guard let _onPictureInPictureStatusChanged = _onPictureInPictureStatusChanged else { return }
 
-            _onPictureInPictureEnter()
+            _onPictureInPictureStatusChanged()
         }
 
         func pictureInPictureControllerDidStopPictureInPicture(_: AVPictureInPictureController) {
-            guard let _onPictureInPictureExit else { return }
+            guard let _onPictureInPictureStatusChanged = _onPictureInPictureStatusChanged else { return }
 
-            _onPictureInPictureExit()
+            _onPictureInPictureStatusChanged()
         }
 
         func pictureInPictureController(
             _: AVPictureInPictureController,
             restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
         ) {
-            guard let _onRestoreUserInterfaceForPictureInPictureStop else { return }
+            guard let _onRestoreUserInterfaceForPictureInPictureStop = _onRestoreUserInterfaceForPictureInPictureStop else { return }
 
             _onRestoreUserInterfaceForPictureInPictureStop()
 
@@ -47,16 +41,14 @@ import React
         }
 
         func setRestoreUserInterfaceForPIPStopCompletionHandler(_ restore: Bool) {
-            guard let _restoreUserInterfaceForPIPStopCompletionHandler else { return }
+            guard let _restoreUserInterfaceForPIPStopCompletionHandler = _restoreUserInterfaceForPIPStopCompletionHandler else { return }
             _restoreUserInterfaceForPIPStopCompletionHandler(restore)
             self._restoreUserInterfaceForPIPStopCompletionHandler = nil
         }
 
         func setupPipController(_ playerLayer: AVPlayerLayer?) {
-            guard let playerLayer else { return }
-            if !AVPictureInPictureController.isPictureInPictureSupported() { return }
             // Create new controller passing reference to the AVPlayerLayer
-            _pipController = AVPictureInPictureController(playerLayer: playerLayer)
+            _pipController = AVPictureInPictureController(playerLayer: playerLayer!)
             if #available(iOS 14.2, *) {
                 _pipController?.canStartPictureInPictureAutomaticallyFromInline = true
             }
@@ -69,7 +61,7 @@ import React
             }
             _isActive = isActive
 
-            guard let _pipController else { return }
+            guard let _pipController = _pipController else { return }
 
             if _isActive && !_pipController.isPictureInPictureActive {
                 DispatchQueue.main.async {
