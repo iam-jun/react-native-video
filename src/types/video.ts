@@ -1,10 +1,14 @@
 import type {ISO639_1} from './language';
 import type {ReactVideoEvents} from './events';
-import type {StyleProp, ViewStyle} from 'react-native';
+import type {StyleProp, ViewProps, ViewStyle} from 'react-native';
 import type VideoResizeMode from './ResizeMode';
 import type FilterType from './FilterType';
 
 export type Headers = Record<string, string>;
+
+export type EnumValues<T extends string | number> = T extends string
+  ? `${T}` | T
+  : T;
 
 export type ReactVideoSourceProperties = {
   uri?: string;
@@ -25,7 +29,9 @@ export type ReactVideoSourceProperties = {
 };
 
 export type ReactVideoSource = Readonly<
-  ReactVideoSourceProperties | NodeRequire
+  Omit<ReactVideoSourceProperties, 'uri'> & {
+    uri?: string | NodeRequire;
+  }
 >;
 
 export type DebugConfig = Readonly<{
@@ -49,9 +55,10 @@ export type Drm = Readonly<{
   base64Certificate?: boolean; // ios default: false
   /* eslint-disable @typescript-eslint/no-unused-vars */
   getLicense?: (
-    licenseUrl: string,
-    contentId: string,
     spcBase64: string,
+    contentId: string,
+    licenseUrl: string,
+    loadedLicenseUrl: string,
   ) => void; // ios
   /* eslint-enable @typescript-eslint/no-unused-vars */
 }>;
@@ -61,6 +68,7 @@ export type BufferConfig = {
   maxBufferMs?: number;
   bufferForPlaybackMs?: number;
   bufferForPlaybackAfterRebufferMs?: number;
+  backBufferDurationMs?: number; // Android
   maxHeapAllocationPercent?: number;
   minBackBufferMemoryReservePercent?: number;
   minBufferMemoryReservePercent?: number;
@@ -80,10 +88,10 @@ export type SelectedTrack = {
 };
 
 export enum SelectedVideoTrackType {
-  AUDO = 'auto',
+  AUTO = 'auto',
   DISABLED = 'disabled',
   RESOLUTION = 'resolution',
-  IUNDEX = 'index',
+  INDEX = 'index',
 }
 
 export type SelectedVideoTrack = {
@@ -97,9 +105,10 @@ export type SubtitleStyle = {
   paddingBottom?: number;
   paddingLeft?: number;
   paddingRight?: number;
+  opacity?: number;
 };
 
-export enum TextTracksType {
+export enum TextTrackType {
   SUBRIP = 'application/x-subrip',
   TTML = 'application/ttml+xml',
   VTT = 'text/vtt',
@@ -108,11 +117,11 @@ export enum TextTracksType {
 export type TextTracks = {
   title: string;
   language: ISO639_1;
-  type: TextTracksType;
+  type: TextTrackType;
   uri: string;
 }[];
 
-export type TextTrackType =
+export type TextTrackSelectionType =
   | 'system'
   | 'disabled'
   | 'title'
@@ -120,11 +129,11 @@ export type TextTrackType =
   | 'index';
 
 export type SelectedTextTrack = Readonly<{
-  type: TextTrackType;
+  type: TextTrackSelectionType;
   value?: string | number;
 }>;
 
-export type AudioTrackType =
+export type AudioTrackSelectionType =
   | 'system'
   | 'disabled'
   | 'title'
@@ -132,7 +141,7 @@ export type AudioTrackType =
   | 'index';
 
 export type SelectedAudioTrack = Readonly<{
-  type: AudioTrackType;
+  type: AudioTrackSelectionType;
   value?: string | number;
 }>;
 
@@ -170,14 +179,15 @@ export enum PosterResizeModeType {
   STRETCH = 'stretch',
 }
 
-export interface ReactVideoProps extends ReactVideoEvents {
+export type AudioOutput = 'speaker' | 'earpiece';
+
+export interface ReactVideoProps extends ReactVideoEvents, ViewProps {
   source?: ReactVideoSource;
   drm?: Drm;
   style?: StyleProp<ViewStyle>;
   adTagUrl?: string;
-  audioOnly?: boolean;
+  audioOutput?: AudioOutput; // Mobile
   automaticallyWaitsToMinimizeStalling?: boolean; // iOS
-  backBufferDurationMs?: number; // Android
   bufferConfig?: BufferConfig; // Android
   chapters?: Chapters[]; // iOS
   contentStartTime?: number; // Android
@@ -185,36 +195,38 @@ export interface ReactVideoProps extends ReactVideoEvents {
   currentPlaybackTime?: number; // Android
   disableFocus?: boolean;
   disableDisconnectError?: boolean; // Android
-  filter?: FilterType; // iOS
+  filter?: EnumValues<FilterType>; // iOS
   filterEnabled?: boolean; // iOS
   focusable?: boolean; // Android
   fullscreen?: boolean; // iOS
   fullscreenAutorotate?: boolean; // iOS
-  fullscreenOrientation?: FullscreenOrientationType; // iOS
+  fullscreenOrientation?: EnumValues<FullscreenOrientationType>; // iOS
   hideShutterView?: boolean; //	Android
-  ignoreSilentSwitch?: IgnoreSilentSwitchType; // iOS
+  ignoreSilentSwitch?: EnumValues<IgnoreSilentSwitchType>; // iOS
   minLoadRetryCount?: number; // Android
   maxBitRate?: number;
-  mixWithOthers?: MixWithOthersType; // iOS
+  mixWithOthers?: EnumValues<MixWithOthersType>; // iOS
   muted?: boolean;
   paused?: boolean;
   pictureInPicture?: boolean; // iOS
   playInBackground?: boolean;
   playWhenInactive?: boolean; // iOS
   poster?: string;
-  posterResizeMode?: PosterResizeModeType;
+  posterResizeMode?: EnumValues<PosterResizeModeType>;
   preferredForwardBufferDuration?: number; // iOS
   preventsDisplaySleepDuringVideoPlayback?: boolean;
   progressUpdateInterval?: number;
   rate?: number;
   repeat?: boolean;
   reportBandwidth?: boolean; //Android
-  resizeMode?: VideoResizeMode;
+  resizeMode?: EnumValues<VideoResizeMode>;
   selectedAudioTrack?: SelectedTrack;
   selectedTextTrack?: SelectedTrack;
   selectedVideoTrack?: SelectedVideoTrack; // android
   subtitleStyle?: SubtitleStyle; // android
+  shutterColor?: string; // Android
   textTracks?: TextTracks;
+  testID?: string;
   trackId?: string; // Android
   useTextureView?: boolean; // Android
   useSecureView?: boolean; // Android

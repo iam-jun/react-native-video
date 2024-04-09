@@ -22,6 +22,7 @@ Then follow the instructions for your platform to link react-native-video into y
 ## iOS
 
 ### Standard Method
+Run `pod install` in the `ios` directory of your project.
 
 **React Native 0.60 and above**
 
@@ -238,6 +239,14 @@ Select RCTVideo-tvOS
 
 ![tvOS step 4](../assets/tvOS-step-4.jpg)
 </details>
+</details>
+
+<details>
+<summary>visionOS</summary>
+
+## visionOS
+Run `pod install` in the `visionos` directory of your project
+
 </details>
 
 ## Examples

@@ -1,6 +1,34 @@
 import AVFoundation
 import Photos
-import Promises
+
+// MARK: - RCTVideoAssetsUtils
+
+enum RCTVideoAssetsUtils {
+    static func getMediaSelectionGroup(
+        asset: AVAsset?,
+        for mediaCharacteristic: AVMediaCharacteristic
+    ) async -> AVMediaSelectionGroup? {
+        if #available(iOS 15, tvOS 15, visionOS 1.0, *) {
+            return try? await asset?.loadMediaSelectionGroup(for: mediaCharacteristic)
+        } else {
+            #if !os(visionOS)
+                return asset?.mediaSelectionGroup(forMediaCharacteristic: mediaCharacteristic)
+            #endif
+        }
+    }
+
+    static func getTracks(asset: AVAsset, withMediaType: AVMediaType) async -> [AVAssetTrack]? {
+        if #available(iOS 15, tvOS 15, visionOS 1.0, *) {
+            return try? await asset.loadTracks(withMediaType: withMediaType)
+        } else {
+            #if !os(visionOS)
+                return asset.tracks(withMediaType: withMediaType)
+            #endif
+        }
+    }
+}
+
+// MARK: - RCTVideoUtils
 
 /*!
  * Collection of pure functions
@@ -94,13 +122,15 @@ enum RCTVideoUtils {
         return 0
     }
 
-    static func getAudioTrackInfo(_ player: AVPlayer?) -> [AnyObject]! {
-        guard let player = player else {
+    static func getAudioTrackInfo(_ player: AVPlayer?) async -> [AnyObject] {
+        guard let player, let asset = player.currentItem?.asset else {
             return []
         }
 
         let audioTracks: NSMutableArray! = NSMutableArray()
-        let group = player.currentItem?.asset.mediaSelectionGroup(forMediaCharacteristic: .audible)
+
+        let group = await RCTVideoAssetsUtils.getMediaSelectionGroup(asset: asset, for: .audible)
+
         for i in 0 ..< (group?.options.count ?? 0) {
             let currentOption = group?.options[i]
             var title = ""
@@ -120,17 +150,19 @@ enum RCTVideoUtils {
             ] as [String: Any]
             audioTracks.add(audioTrack)
         }
-        return audioTracks as [AnyObject]?
+
+        return audioTracks as [AnyObject]
     }
 
-    static func getTextTrackInfo(_ player: AVPlayer?) -> [TextTrack]! {
-        guard let player = player else {
+    static func getTextTrackInfo(_ player: AVPlayer?) async -> [TextTrack] {
+        guard let player, let asset = player.currentItem?.asset else {
             return []
         }
 
         // if streaming video, we extract the text tracks
         var textTracks: [TextTrack] = []
-        let group = player.currentItem?.asset.mediaSelectionGroup(forMediaCharacteristic: .legible)
+        let group = await RCTVideoAssetsUtils.getMediaSelectionGroup(asset: asset, for: .legible)
+
         for i in 0 ..< (group?.options.count ?? 0) {
             let currentOption = group?.options[i]
             var title = ""
@@ -178,73 +210,93 @@ enum RCTVideoUtils {
         return Data(base64Encoded: adoptURL.absoluteString)
     }
 
-    static func generateMixComposition(_ asset: AVAsset) -> AVMutableComposition {
+    static func generateMixComposition(_ asset: AVAsset) async -> AVMutableComposition {
+        let videoTracks = await RCTVideoAssetsUtils.getTracks(asset: asset, withMediaType: .video)
+        let audioTracks = await RCTVideoAssetsUtils.getTracks(asset: asset, withMediaType: .audio)
+
         let mixComposition = AVMutableComposition()
 
-        let videoAsset: AVAssetTrack! = asset.tracks(withMediaType: AVMediaType.video).first
+        if let videoAsset = videoTracks?.first, let audioAsset = audioTracks?.first {
+            let videoCompTrack: AVMutableCompositionTrack! = mixComposition.addMutableTrack(
+                withMediaType: AVMediaType.video,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            )
+            try? videoCompTrack.insertTimeRange(
+                CMTimeRangeMake(start: .zero, duration: videoAsset.timeRange.duration),
+                of: videoAsset,
+                at: .zero
+            )
 
-        // we need videoAsset asset to be not null to get durration later
-        if videoAsset == nil {
-            return mixComposition
+            let audioCompTrack: AVMutableCompositionTrack! = mixComposition.addMutableTrack(
+                withMediaType: AVMediaType.audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            )
+
+            try? audioCompTrack.insertTimeRange(
+                CMTimeRangeMake(start: .zero, duration: audioAsset.timeRange.duration),
+                of: audioAsset,
+                at: .zero
+            )
         }
-
-        let videoCompTrack: AVMutableCompositionTrack! = mixComposition.addMutableTrack(
-            withMediaType: AVMediaType.video,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
-        try? videoCompTrack.insertTimeRange(
-            CMTimeRangeMake(start: .zero, duration: videoAsset.timeRange.duration),
-            of: videoAsset,
-            at: .zero
-        )
-
-        let audioAsset: AVAssetTrack! = asset.tracks(withMediaType: AVMediaType.audio).first
-        let audioCompTrack: AVMutableCompositionTrack! = mixComposition.addMutableTrack(
-            withMediaType: AVMediaType.audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
-        try? audioCompTrack.insertTimeRange(
-            CMTimeRangeMake(start: .zero, duration: audioAsset.timeRange.duration),
-            of: audioAsset,
-            at: .zero
-        )
 
         return mixComposition
     }
 
-    static func getValidTextTracks(asset: AVAsset, assetOptions: NSDictionary?, mixComposition: AVMutableComposition, textTracks: [TextTrack]?) -> [TextTrack] {
-        let videoAsset: AVAssetTrack! = asset.tracks(withMediaType: AVMediaType.video).first
+    static func getValidTextTracks(asset: AVAsset, assetOptions: NSDictionary?, mixComposition: AVMutableComposition,
+                                   textTracks: [TextTrack]?) async -> [TextTrack] {
         var validTextTracks: [TextTrack] = []
+        var tracks: [[AVAssetTrack]] = []
 
-        if let textTracks = textTracks, !textTracks.isEmpty {
-            for i in 0 ..< textTracks.count {
+        let videoTracks = await RCTVideoAssetsUtils.getTracks(asset: asset, withMediaType: .video)
+        guard let videoAsset = videoTracks?.first else { return validTextTracks }
+
+        if let textTracks, !textTracks.isEmpty {
+            for textTrack in textTracks {
                 var textURLAsset: AVURLAsset!
-                let textUri: String = textTracks[i].uri
+                let textUri: String = textTrack.uri
+
                 if textUri.lowercased().hasPrefix("http") {
                     textURLAsset = AVURLAsset(url: NSURL(string: textUri)! as URL, options: (assetOptions as! [String: Any]))
                 } else {
-                    let isDisabledTrack: Bool! = textTracks[i].type == "disabled"
+                    let isDisabledTrack: Bool! = textTrack.type == "disabled"
                     let searchPath: FileManager.SearchPathDirectory = isDisabledTrack ? .cachesDirectory : .documentDirectory
-                    textURLAsset = AVURLAsset(url: RCTVideoUtils.urlFilePath(filepath: textUri as NSString?, searchPath: searchPath) as URL, options: nil)
+                    textURLAsset = AVURLAsset(
+                        url: RCTVideoUtils.urlFilePath(filepath: textUri as NSString?, searchPath: searchPath) as URL,
+                        options: nil
+                    )
                 }
-                let textTrackAsset: AVAssetTrack! = textURLAsset.tracks(withMediaType: AVMediaType.text).first
-                if textTrackAsset == nil { continue } // fix when there's no textTrackAsset
-                validTextTracks.append(textTracks[i])
+
+                if let track = await RCTVideoAssetsUtils.getTracks(asset: textURLAsset, withMediaType: .text) {
+                    tracks.append(track)
+                }
+            }
+
+            for i in 0 ..< tracks.count {
+                guard let track = tracks[i].first else { continue } // fix when there's no textTrackAsset
+
                 let textCompTrack: AVMutableCompositionTrack! = mixComposition.addMutableTrack(withMediaType: AVMediaType.text,
                                                                                                preferredTrackID: kCMPersistentTrackID_Invalid)
-                if videoAsset != nil {
-                    try? textCompTrack.insertTimeRange(
-                        CMTimeRangeMake(start: .zero, duration: videoAsset!.timeRange.duration),
-                        of: textTrackAsset,
+
+                do {
+                    try textCompTrack.insertTimeRange(
+                        CMTimeRangeMake(start: .zero, duration: videoAsset.timeRange.duration),
+                        of: track,
                         at: .zero
                     )
+                    validTextTracks.append(textTracks[i])
+                } catch {
+                    // TODO: upgrade error by call some props callback to better inform user
+                    print("Error occurred on textTrack insert attempt: \(error.localizedDescription)")
+                    continue
                 }
             }
         }
 
-        let emptyVttFile: TextTrack? = self.createEmptyVttFile()
-        if emptyVttFile != nil {
-            validTextTracks.append(emptyVttFile!)
+        if !validTextTracks.isEmpty {
+            let emptyVttFile: TextTrack? = self.createEmptyVttFile()
+            if emptyVttFile != nil {
+                validTextTracks.append(emptyVttFile!)
+            }
         }
 
         return validTextTracks
@@ -279,25 +331,26 @@ enum RCTVideoUtils {
         ])
     }
 
-    static func delay(seconds: Int = 0) -> Promise<Void> {
-        return Promise<Void>(on: .global()) { fulfill, _ in
-            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + Double(Int64(seconds)) / Double(NSEC_PER_SEC)) {
-                fulfill(())
+    static func delay(seconds: Int = 0, completion: @escaping () async throws -> Void) {
+        return DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(seconds)) {
+            Task.detached(priority: .userInitiated) {
+                try await completion()
             }
         }
     }
 
-    static func preparePHAsset(uri: String) -> Promise<AVAsset?> {
-        return Promise<AVAsset?>(on: .global()) { fulfill, reject in
-            let assetId = String(uri[uri.index(uri.startIndex, offsetBy: "ph://".count)...])
-            guard let phAsset = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil).firstObject else {
-                reject(NSError(domain: "", code: 0, userInfo: nil))
-                return
-            }
-            let options = PHVideoRequestOptions()
-            options.isNetworkAccessAllowed = true
+    static func preparePHAsset(uri: String) async -> AVAsset? {
+        let assetId = String(uri[uri.index(uri.startIndex, offsetBy: "ph://".count)...])
+        guard let phAsset = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil).firstObject else {
+            return nil
+        }
+
+        let options = PHVideoRequestOptions()
+        options.isNetworkAccessAllowed = true
+
+        return await withCheckedContinuation { continuation in
             PHCachingImageManager().requestAVAsset(forVideo: phAsset, options: options) { data, _, _ in
-                fulfill(data)
+                continuation.resume(returning: data)
             }
         }
     }
@@ -347,5 +400,51 @@ enum RCTVideoUtils {
         }
 
         return nil
+    }
+
+    static func getCurrentWindow() -> UIWindow? {
+        if #available(iOS 13.0, tvOS 13, *) {
+            return UIApplication.shared.connectedScenes
+                .flatMap { ($0 as? UIWindowScene)?.windows ?? [] }
+                .last { $0.isKeyWindow }
+        } else {
+            #if !os(visionOS)
+                return UIApplication.shared.keyWindow
+            #endif
+        }
+    }
+
+    static func generateVideoComposition(asset: AVAsset, filter: CIFilter) async -> AVVideoComposition? {
+        if #available(iOS 16, tvOS 16, visionOS 1.0, *) {
+            return try? await AVVideoComposition.videoComposition(
+                with: asset,
+                applyingCIFiltersWithHandler: { (request: AVAsynchronousCIImageFilteringRequest) in
+                    if filter == nil {
+                        request.finish(with: request.sourceImage, context: nil)
+                    } else {
+                        let image: CIImage! = request.sourceImage.clampedToExtent()
+                        filter.setValue(image, forKey: kCIInputImageKey)
+                        let output: CIImage! = filter.outputImage?.cropped(to: request.sourceImage.extent)
+                        request.finish(with: output, context: nil)
+                    }
+                }
+            )
+        } else {
+            #if !os(visionOS)
+                return AVVideoComposition(
+                    asset: asset,
+                    applyingCIFiltersWithHandler: { (request: AVAsynchronousCIImageFilteringRequest) in
+                        if filter == nil {
+                            request.finish(with: request.sourceImage, context: nil)
+                        } else {
+                            let image: CIImage! = request.sourceImage.clampedToExtent()
+                            filter.setValue(image, forKey: kCIInputImageKey)
+                            let output: CIImage! = filter.outputImage?.cropped(to: request.sourceImage.extent)
+                            request.finish(with: output, context: nil)
+                        }
+                    }
+                )
+            #endif
+        }
     }
 }
